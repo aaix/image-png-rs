@@ -638,6 +638,14 @@ impl<W: Write> Writer<W> {
 
     /// Writes the next image data.
     pub fn write_image_data(&mut self, data: &[u8]) -> Result<()> {
+        self._write_image_data(data, None)
+    }
+
+    pub fn write_image_data_with_aligned_rows(&mut self, data: &[u8], row_alignment: usize) -> Result<()> {
+        self._write_image_data(data, Some(row_alignment))
+    }
+    
+    fn _write_image_data(&mut self, data: &[u8], row_alignment: Option<usize>) -> Result<()> {
         if self.info.color_type == ColorType::Indexed && !self.info.has_palette {
             return Err(EncodingError::Format(FormatErrorKind::NoPalette.into()));
         }
@@ -654,13 +662,47 @@ impl<W: Write> Writer<W> {
             height = self.info.height as usize;
         }
 
+        let align = |v: usize| {
+            let align = row_alignment.unwrap();
+            (v / align + {
+                if v % align == 0 {
+                    0
+                } else {
+                    1
+                }
+            }) * align
+        };
+
         let in_len = self.info.raw_row_length_from_width(width as u32) - 1;
         let data_size = in_len * height;
-        if data_size != data.len() {
+        let bytes_per_px = (self.info.bit_depth.into_u8() / 8 * self.info.color_type.samples_u8() / 8) as usize;
+
+
+        let heap_data: Vec<u8>;
+
+        let (data_len, data) = if let Some(_) = row_alignment {
+            let row_width = width * bytes_per_px;
+            let row_padding = align(row_width) - row_width;
+
+            println!("row width is {} bytes", row_width);
+            println!("row padding is {} bytes", row_padding);
+
+            heap_data = data.iter().enumerate().filter(|item| {item.0 % (row_width+ row_padding) < row_width}).map(|i| {*i.1}).collect::<Vec<u8>>();
+
+            if row_padding > 0 {
+                (heap_data.len(), heap_data.as_slice())
+            } else {
+                (data.len(), data) 
+            }
+        } else {
+            (data.len(), data)
+        };
+
+        if data_size != data_len {
             return Err(EncodingError::Parameter(
                 ParameterErrorKind::ImageBufferSize {
                     expected: data_size,
-                    actual: data.len(),
+                    actual: data_len,
                 }
                 .into(),
             ));
