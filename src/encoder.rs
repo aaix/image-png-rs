@@ -653,6 +653,10 @@ impl<W: Write> Writer<W> {
         let row_width = width * bytes_per_px;
         let row_padding = align(row_width) - row_width;
 
+        if row_padding == 0 {
+            return self.write_image_data(data);
+        };
+
         let heap_data: Vec<u8> = data.iter().enumerate().filter(|item| {item.0 % (row_width+ row_padding) < row_width}).map(|i| {*i.1}).collect::<Vec<u8>>();
 
         self.write_image_data(heap_data.as_ref())
