@@ -657,12 +657,18 @@ impl<W: Write> Writer<W> {
             return self.write_image_data(data);
         };
 
-        let heap_data: Vec<u8> = data.iter().enumerate().filter(|item| {item.0 % (row_width+ row_padding) < row_width}).map(|i| {*i.1}).collect::<Vec<u8>>();
+        let mut index: usize = 0;
+        let mut heap_data: Vec<u8> = Vec::from(data);
+        heap_data.retain(|_| {
+            let res = index % (row_width + row_padding) < row_width;
+            index+= 1;
+            res
+        });
 
         self.write_image_data(heap_data.as_ref())
     }
     
-    fn write_image_data(&mut self, data: &[u8]) -> Result<()> {
+    pub fn write_image_data(&mut self, data: &[u8]) -> Result<()> {
         if self.info.color_type == ColorType::Indexed && !self.info.has_palette {
             return Err(EncodingError::Format(FormatErrorKind::NoPalette.into()));
         }
